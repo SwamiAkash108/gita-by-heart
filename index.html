@@ -58,7 +58,7 @@ nav button[aria-current=true]{color:var(--primary);background:var(--tint);font-w
 .w.now{border-bottom:2px solid var(--accent)}
 .w.miss{color:var(--wrong)}
 .hidden-verse{border:1.5px dashed var(--faint);border-radius:12px;padding:34px 12px;text-align:center;color:var(--muted);margin:14px 0}
-.pic img{display:block;width:100%;max-width:300px;border-radius:10px;border:1px solid var(--line);margin:8px 0}
+.pic img{display:block;width:100%;height:auto;max-width:300px;border-radius:10px;border:1px solid var(--line);margin:8px 0}
 #c3d-panel .pic img{max-width:150px;float:right;margin:0 0 6px 12px}
 .sk{margin:10px 0;padding:8px 12px;border-left:3px solid var(--accent);background:var(--tint);border-radius:0 8px 8px 0}
 .sk b{font:italic 600 1.05em var(--head);color:var(--gold)}
@@ -980,7 +980,7 @@ window.Castle3D = (function () {
     const words = caption(u).split(" "), lines = [""]; words.forEach(w => { const t = lines[lines.length - 1]; if (g.measureText(t + " " + w).width > 178 && t) lines.push(w); else lines[lines.length - 1] = (t + " " + w).trim(); });
     lines.slice(0, 5).forEach((t, i) => g.fillText(t, 100, 118 + i * 29));
     const tex = new T.CanvasTexture(c); tex.colorSpace = T.SRGBColorSpace; tex.anisotropy = renderer ? renderer.capabilities.getMaxAnisotropy() : 4; if (face.material.map) face.material.map.dispose(); face.material.map = tex; face.material.color.set(0xffffff); face.material.needsUpdate = true;
-    const src = picFn && picFn(u); if (!src) return;       // a painted picture, when this chapter has them: number above, picture below
+    const src = picFn && picFn(u, q >= 5 ? "l" : "s"); if (!src) return;       // a painted picture, when this chapter has them: number above, picture below
     const im = new Image(); im.onload = () => { g.fillStyle = P.plaque; g.fillRect(0, 10, 200, 250); g.textAlign = "center"; g.fillStyle = P.title; g.font = '600 24px "Crimson Text", Georgia, serif'; g.fillText(u.label, 100, 32);
       const h = 216, w = Math.min(190, h * im.width / im.height), hh = w * im.height / im.width; g.drawImage(im, 100 - w / 2, 40 + (h - hh) / 2, w, hh); tex.needsUpdate = true; };
     im.src = src;
@@ -55897,13 +55897,11 @@ const learned=u=>!!(S.units[u.id]&&S.units[u.id].learned);
 const logAdd=e=>{e.d=today();e.t=Date.now();S.log.push(e);save()};
 const laneDone=k=>S.log.some(e=>e.d===today()&&e.kind===k);
 
-/* ---------- pictures: one file per chapter, loaded only when that chapter is opened ---------- */
-const PICBASE=/*PICBASE*/"pics/",picWait={};
-const picOf=u=>{const c=(window.GITA_PICS||{})[u.ch];return c?c[u.ch+"."+u.v[0]]:null};
-function needPics(ch,cb){if(!(G.picChapters||[]).includes(ch))return;if((window.GITA_PICS||{})[ch])return cb&&cb();
-  if(picWait[ch]){if(cb)picWait[ch].push(cb);return}picWait[ch]=cb?[cb]:[];
-  const sc=document.createElement("script");sc.src=PICBASE+"pics-"+ch+".js";sc.onload=()=>{picWait[ch].forEach(f=>f());picWait[ch]=null};document.head.appendChild(sc)}
-const picSlot=u=>{setTimeout(()=>needPics(u.ch,()=>{const el=document.getElementById("pic-"+u.i),src=picOf(u);if(el&&src)el.innerHTML=`<img src="${src}" alt="">`}),0);return `<div class="pic" id="pic-${u.i}"></div>`};
+/* ---------- pictures: small web files, each loaded only when it is about to be seen ---------- */
+const PICBASE=/*PICBASE*/"pics/";
+const picOf=(u,size)=>(G.picChapters||[]).includes(u.ch)?PICBASE+u.ch+"/"+(size==="s"?"s/":"")+u.ch+"."+u.v[0]+".webp":null;
+const needPics=(ch,cb)=>{if((G.picChapters||[]).includes(ch)&&cb)cb()};
+const picSlot=u=>{const src=picOf(u);return src?`<div class="pic"><img src="${src}" alt="" loading="lazy" width="600" height="800"></div>`:""};
 
 /* ---------- theme: Bhakti Marga light / dark ---------- */
 const mq=window.matchMedia?matchMedia("(prefers-color-scheme: dark)"):null;
@@ -56272,7 +56270,7 @@ const C3=()=>window.Castle3D;
 function open3D(){
   const box=$("#c3d");box.classList.add("on");$("#c3d-panel").hidden=true;
   $("#c3d-sel").innerHTML=`<option value="">Whole field</option>`+G.chapters.map(c=>`<option value="${c.n}">${c.n} · ${esc(c.kuru)}</option>`).join("");
-  try{C3().close();order3=C3().open($("#c3d-canvas"),G,U,nav3,PAL[theme()],picOf);nav3({level:"field"})}
+  try{C3().close();order3=C3().open($("#c3d-canvas"),G,U,nav3,PAL[theme()],location.protocol==="file:"?null:picOf);nav3({level:"field"})}
   catch(err){$("#c3d-canvas").innerHTML=`<p style="padding:90px 24px">The 3D castle needs WebGL, which is not available in this browser. (${esc(err.message)})</p>`}
 }
 function nav3(nv){
