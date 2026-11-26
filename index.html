@@ -972,17 +972,17 @@ window.Castle3D = (function () {
     if (t.length > 46) t = t.slice(0, 45).replace(/\s+\S*$/, "") + "…";
     return t;
   }
-  function paint(face, u, color) {
-    const c = document.createElement("canvas"), g = c.getContext("2d"); c.width = 200; c.height = 260;
+  function paint(face, u, color, q) {      // q = sharpness: 2 for a plaque in the room, 5 for the one you stand in front of
+    q = q || 2; const c = document.createElement("canvas"), g = c.getContext("2d"); c.width = 200 * q; c.height = 260 * q; g.scale(q, q); g.imageSmoothingQuality = "high";
     g.fillStyle = P.plaque; g.fillRect(0, 0, 200, 260); g.fillStyle = "#" + color.toString(16).padStart(6, "0"); g.fillRect(0, 0, 200, 10);
     g.textAlign = "center"; g.fillStyle = P.title; g.font = '600 52px "Crimson Text", Georgia, serif'; g.fillText(u.label, 100, 70);
     g.fillStyle = P.labelText; g.font = '22px "Open Sans", Arial, sans-serif';
     const words = caption(u).split(" "), lines = [""]; words.forEach(w => { const t = lines[lines.length - 1]; if (g.measureText(t + " " + w).width > 178 && t) lines.push(w); else lines[lines.length - 1] = (t + " " + w).trim(); });
     lines.slice(0, 5).forEach((t, i) => g.fillText(t, 100, 118 + i * 29));
-    const tex = new T.CanvasTexture(c); tex.anisotropy = 4; if (face.material.map) face.material.map.dispose(); face.material.map = tex; face.material.color.set(0xffffff); face.material.needsUpdate = true;
+    const tex = new T.CanvasTexture(c); tex.colorSpace = T.SRGBColorSpace; tex.anisotropy = renderer ? renderer.capabilities.getMaxAnisotropy() : 4; if (face.material.map) face.material.map.dispose(); face.material.map = tex; face.material.color.set(0xffffff); face.material.needsUpdate = true;
     const src = picFn && picFn(u); if (!src) return;       // a painted picture, when this chapter has them: number above, picture below
-    const im = new Image(); im.onload = () => { g.fillStyle = P.plaque; g.fillRect(0, 10, 200, 250); g.textAlign = "center"; g.fillStyle = P.title; g.font = '600 34px "Crimson Text", Georgia, serif'; g.fillText(u.label, 100, 42);
-      const w = 188, h = 204, k = Math.max(w / im.width, h / im.height); g.save(); g.beginPath(); g.rect(6, 50, w, h); g.clip(); g.drawImage(im, 6 + (w - im.width * k) / 2, 50 + (h - im.height * k) / 2, im.width * k, im.height * k); g.restore(); tex.needsUpdate = true; };
+    const im = new Image(); im.onload = () => { g.fillStyle = P.plaque; g.fillRect(0, 10, 200, 250); g.textAlign = "center"; g.fillStyle = P.title; g.font = '600 24px "Crimson Text", Georgia, serif'; g.fillText(u.label, 100, 32);
+      const h = 216, w = Math.min(190, h * im.width / im.height), hh = w * im.height / im.width; g.drawImage(im, 100 - w / 2, 40 + (h - hh) / 2, w, hh); tex.needsUpdate = true; };
     im.src = src;
   }
   function stele(color) {
@@ -1031,7 +1031,7 @@ window.Castle3D = (function () {
       room.out.forEach(s => {
         const p = room.g.localToWorld(s.local.clone());
         s.obj.userData.pick = { t: "st", si: stations.length }; pickables.push(s.obj); faces.push(s);
-        stations.push({ u: s.u, pos: p, centre, ch: ch.n, room: ri }); route.push(new T.Vector3(p.x, .09, p.z).lerp(new T.Vector3(centre.x, .09, centre.z), .3));
+        stations.push({ u: s.u, pos: p, centre, ch: ch.n, room: ri, f: s }); route.push(new T.Vector3(p.x, .09, p.z).lerp(new T.Vector3(centre.x, .09, centre.z), .3));
       });
       route.push(W(0, -room.d / 2 + 1), W(0, -room.d / 2 - 2.2));
     });
@@ -1187,7 +1187,8 @@ window.Castle3D = (function () {
   function lod() {      // stations, numbers and room names only for structures near the camera; big titles only from afar
     const farView = cam.dist > 300;
     for (const n in structures) { const s = structures[n], d = Math.hypot(cam.tx - s.cx, cam.tz - s.cz), on = !farView && d < s.R + 150;
-      s.details.forEach(g => { g.visible = on; }); if (on && !s.painted) { s.painted = true; s.faces.forEach(f => paint(f.face, f.u, f.color)); } if (s.near) s.near.visible = on; if (s.far) s.far.visible = farView; }
+      s.details.forEach(g => { g.visible = on; }); if (on && !s.painted) { s.painted = true; s.faces.forEach(f => paint(f.face, f.u, f.color)); }
+      if (!on && s.painted && !farView) { s.painted = false; s.faces.forEach(f => { if (f.face.material.map) { f.face.material.map.dispose(); f.face.material.map = null; f.face.material.needsUpdate = true; } }); } if (s.near) s.near.visible = on; if (s.far) s.far.visible = farView; }
     farOnly.forEach(o => { o.visible = cam.dist > 420; });
   }
   function frame(now) {
@@ -1224,10 +1225,10 @@ window.Castle3D = (function () {
     }
   }
 
-  let picFn = null, nav = { level: "field" }; const tell = () => { if (onPick) onPick(nav); };
+  let picFn = null, sharp = null, nav = { level: "field" }; const tell = () => { if (onPick) onPick(nav); };
   const api = {
     open(hostEl, G, units, pick, palette, pics) {
-      picFn = pics || null; T = window.THREE; P = palette; INK = P.ink; PIG = P.pig; host = hostEl; onPick = pick; stations = []; pickables = []; structures = {}; farOnly = []; tick = 0;
+      picFn = pics || null; T = window.THREE; P = palette; INK = P.ink; PIG = P.pig; host = hostEl; onPick = pick; stations = []; pickables = []; structures = {}; farOnly = []; tick = 0; sharp = null;
       if (!T) throw new Error("3D library not loaded");
       renderer = new T.WebGLRenderer({ antialias: true, alpha: true }); renderer.setPixelRatio(Math.min(2, window.devicePixelRatio || 1)); renderer.setClearColor(0, 0);
       host.innerHTML = ""; host.appendChild(renderer.domElement); renderer.domElement.style.cssText = "width:100%;height:100%;display:block;touch-action:none;cursor:grab";
@@ -1275,12 +1276,13 @@ window.Castle3D = (function () {
     goRoom(n, ri) { const s = structures[n], r = s && s.rooms[ri]; if (!r) return; nav = { level: "room", ch: n, room: ri };
       flyTo({ tx: r.centre.x, ty: -r.size * .32, tz: r.centre.z, dist: r.size * 1.5 + 6, theta: Math.atan2(s.cx - r.centre.x, s.cz - r.centre.z), phi: .78 }); tell(); },
     goStation(i) { const s = stations[i]; if (!s) return; nav = { level: "st", ch: s.ch, room: s.room, si: i };
-      flyTo({ tx: s.pos.x, ty: .2, tz: s.pos.z, dist: 8.2, theta: Math.atan2(s.centre.x - s.pos.x, s.centre.z - s.pos.z), phi: 1.3 }); tell(); },
+      if (sharp && sharp !== s && structures[sharp.ch].painted) paint(sharp.f.face, sharp.f.u, sharp.f.color); sharp = s; const hall = structures[s.ch]; if (!hall.painted) { hall.painted = true; hall.faces.forEach(f => paint(f.face, f.u, f.color)); } paint(s.f.face, s.f.u, s.f.color, 5);
+      flyTo({ tx: s.pos.x, ty: .75, tz: s.pos.z, dist: 8.6, theta: Math.atan2(s.centre.x - s.pos.x, s.centre.z - s.pos.z), phi: 1.3 }); tell(); },
     up() { if (nav.level === "st") api.goRoom(nav.ch, nav.room); else if (nav.level === "room") api.goChapter(nav.ch); else api.goField(); },
     nav() { return nav; },
     roomInfo(n, ri) { const r = structures[n] && structures[n].rooms[ri]; return r ? { first: r.first, count: r.count } : null; },
     caption,
-    repaint(n) { const s = structures[n]; if (s && s.painted) s.faces.forEach(f => paint(f.face, f.u, f.color)); },
+    repaint(n) { const s = structures[n]; if (s && s.painted) s.faces.forEach(f => paint(f.face, f.u, f.color, sharp && sharp.f === f ? 5 : 2)); },
     snap() { if (tween) { Object.assign(cam, tween.to); tween = null; } lod(); },
     indexOf(u) { return stations.findIndex(s => s.u === u); },
     count() { return stations.length; },
