@@ -72,6 +72,7 @@ textarea,input[type=text]{font:inherit;color:inherit;width:100%;background:var(-
 #c3d-canvas{position:absolute;inset:0}
 #c3d-top{position:absolute;top:14px;left:14px;right:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 #c3d-top button,#c3d-panel button{background:var(--surface);border:1px solid var(--primary);color:var(--primary);border-radius:8px;padding:7px 12px;font-size:14.5px;font-weight:600}
+#pre-ch{font:inherit;color:inherit;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:6px}
 #c3d-sel{font:600 14.5px var(--body);color:var(--primary);background:var(--surface);border:1px solid var(--primary);border-radius:8px;padding:7px 10px;max-width:60vw}
 #c3d-panel h3{margin:0;font:600 21px/1.25 var(--head);color:var(--primary)}
 #c3d-panel .list button{display:block;width:100%;text-align:left;margin:6px 0;font-weight:400;color:var(--text);border-color:var(--line)}
@@ -55912,9 +55913,9 @@ const PAL={
 /* ---------- today's lanes ---------- */
 function lanes(){
   const L=U.filter(learned), next=U.filter(u=>!learned(u)).sort((a,b)=>ord(a.ch)-ord(b.ch)||a.i-b.i);
-  const dates=[...new Set(L.map(u=>us(u).learned))].filter(d=>d<today()).sort();
+  const dates=[...new Set(L.filter(u=>!us(u).pre).map(u=>us(u).learned))].filter(d=>d<today()).sort();
   const yDate=dates[dates.length-1];
-  const yesterday=yDate?L.filter(u=>us(u).learned===yDate):[];
+  const yesterday=yDate?L.filter(u=>!us(u).pre&&us(u).learned===yDate):[];
   const curCh=next.length?next[0].ch:(L.length?L[L.length-1].ch:U[0].ch);
   const chapter=L.filter(u=>u.ch===curCh);
   const older=L.filter(u=>u.ch!==curCh);
@@ -56101,10 +56102,12 @@ function stationPanel(u){
   <label class="f">My image</label><textarea id="img" rows="2">${esc(st.img||"")}</textarea>
   <div class="sk">${u.sk.map(p=>`<b>${esc(p[0])}</b> — ${esc(p[1])}`).join("<br>")}</div>
   <div id="vv">${learned(u)?`<div class="hidden-verse">Try to say it first.</div>`:""}</div>
-  <div class="bar"><button class="btn" data-a="save">Save</button><button class="btn ghost" data-a="text">Show the text</button>${learned(u)?"":`<button class="btn ghost" data-a="learn">Learn it now</button>`}</div>`);
+  <div class="bar"><button class="btn" data-a="save">Save</button><button class="btn ghost" data-a="text">Show the text</button>${learned(u)?`<button class="btn ghost" data-a="unlearn">Mark as not learned</button>`:`<button class="btn ghost" data-a="learn">Learn it now</button><button class="btn ghost" data-a="known">I already know it</button>`}</div>`);
   if(!learned(u))$("#vv").innerHTML=`<div class="verse">${verseHTML(u)}</div>`;
   const keep=()=>{st.img=$("#img").value.trim();const p=$("#pl");if(p)S.places["s"+u.id]=p.value.trim();save()};
-  $("#stage-body").onclick=e=>{const a=e.target.dataset.a;if(a==="save"){keep();closeStage()}if(a==="text")$("#vv").innerHTML=`<div class="verse">${verseHTML(u)}</div>`;if(a==="learn"){keep();learn(u)}};
+  $("#stage-body").onclick=e=>{const a=e.target.dataset.a;if(a==="save"){keep();closeStage()}if(a==="text")$("#vv").innerHTML=`<div class="verse">${verseHTML(u)}</div>`;if(a==="learn"){keep();learn(u)}
+    if(a==="known"){keep();st.learned="2000-01-01";st.pre=true;st.step=5;logAdd({kind:"premark",id:u.id});closeStage()}
+    if(a==="unlearn"&&confirm(`Mark ${u.label} as not learned? It will come up as a new verse again.`)){keep();delete st.learned;delete st.pre;st.step=0;logAdd({kind:"unlearn",id:u.id});closeStage()}};
 }
 function vRecite(){
   const L=U.filter(learned);
@@ -56191,6 +56194,11 @@ function vLedger(){
   <p class="small muted">Red outline: the last recital had a wrong word.</p></div>
   <div class="card"><h2>Settings</h2><label class="f">Name</label><input type="text" id="nm2" value="${esc(S.name)}">
   <label class="f">New units a day</label><div class="seg">${[1,2,3].map(n=>`<button data-pace="${n}" class="${S.pace===n?"on":""}">${n}</button>`).join("")}</div>
+  <label class="f">Already learned before starting here</label>
+  <div class="row"><span class="small">Chapter</span><select id="pre-ch">${PILOT.map(n=>`<option ${n===(S.first||PILOT[0])?"selected":""}>${n}</option>`).join("")}</select>
+  <span class="small">up to verse</span><input type="text" id="pre-v" inputmode="numeric" style="width:70px" placeholder="9">
+  <button class="btn small" id="pre-go">Mark as learned</button></div>
+  <p class="small muted">Marks every verse of that chapter up to this one as in place, so it goes straight to review, and makes that chapter the one you continue with. You can undo a single verse from its station in the Castle tab.</p>
   <label class="f">Look</label><div class="seg">${["auto","light","dark"].map(t=>`<button data-theme="${t}" class="${S.theme===t?"on":""}">${t[0].toUpperCase()+t.slice(1)}</button>`).join("")}</div>
   <label class="f">Start with chapter</label><div class="seg">${PILOT.map(n=>`<button data-first="${n}" class="${ord(n)===0?"on":""}">${n}</button>`).join("")}</div>
   <p class="small muted">Two a day on five days is the two-year pace. One a day is a good start, and right for a younger learner.</p></div>
@@ -56216,6 +56224,10 @@ $("#view").addEventListener("click",e=>{
   if(d.station)stationPanel(U[+d.station]);
   if(d.pace){S.pace=+d.pace;save();render()}
   if(d.first){S.first=+d.first;save();render()}
+  if(e.target.id==="pre-go"){const ch=+$("#pre-ch").value,v=parseInt($("#pre-v").value,10),list=U.filter(u=>u.ch===ch&&u.v[0]<=v&&!learned(u));
+    if(!v||!list.length){alert(v?"Those verses are already marked.":"Enter the last verse number you know.");return}
+    if(!confirm(`Mark ${list.length} unit${list.length>1?"s":""} of chapter ${ch} (${list[0].label} to ${list[list.length-1].label}) as already learned?`))return;
+    list.forEach(u=>{const st=us(u);st.learned="2000-01-01";st.pre=true;st.step=5});S.first=ch;logAdd({kind:"premark",ch,upto:v,n:list.length});tab="today";render()}
   if(d.theme){S.theme=d.theme;save();applyTheme();render()}
   if(e.target.id==="go3d")open3D();
   if(d.run){const Lr=U.filter(learned);let units=[],m;
