@@ -100,6 +100,12 @@ details.structure:not([open])>summary b::after{content:"  ▸";color:var(--accen
 .seg button{background:none;border:0;padding:6px 12px;color:var(--primary);font-weight:600} .seg button.on{background:var(--primary);color:var(--on-primary)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(54px,1fr));gap:6px;margin-top:8px}
 .cell{border:1px solid var(--line);border-radius:6px;text-align:center;padding:6px 2px;font-size:13px;background:var(--surface-2)}
+button.cell{font:inherit;color:inherit;cursor:pointer}
+details.led{border-top:1px solid var(--line);padding:8px 0}
+details.led>summary{cursor:pointer;display:flex;gap:10px;align-items:baseline;justify-content:space-between;list-style:none}
+details.led>summary::-webkit-details-marker{display:none}
+details.led>summary b{font:600 17px/1.3 var(--head);color:var(--primary)}
+.cell.s2{border-color:var(--green);font-weight:600}
 .cell.s1{background:var(--part-bg)} .cell.s2{background:var(--ok-bg)} .cell.bad{outline:2px solid var(--wrong)}
 label.f{display:block;margin:10px 0 2px;font:500 11.5px/1.5 var(--deco);letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
 </style>
@@ -56060,7 +56066,7 @@ function learn(u){
 }
 
 /* ---------- views ---------- */
-let pickCh=0,tab="today",reciteOpt={listener:false,type:false};
+let pickCh=0,ledCh=0,tab="today",reciteOpt={listener:false,type:false};
 function vToday(){
   const L=lanes();
   const lane=(k,title,desc,units,locked)=>{const done=laneDone(k)&&units.length;
@@ -56195,8 +56201,10 @@ function vLedger(){
   const acc={};S.log.filter(e=>e.kind==="unit").forEach(e=>{acc[e.id]=e});
   const days=[...new Set(S.log.map(e=>e.d))].length, w=S.log.filter(e=>e.kind==="unit"&&e.via!=="learn"), tw=w.reduce((a,e)=>a+e.total,0), ww=w.reduce((a,e)=>a+e.wrong.length,0);
   return `<div class="card"><h2>${esc(S.name||"Learner")}</h2><p>${U.filter(learned).length} of ${U.length} stations · ${days} practice day${days===1?"":"s"}${tw?` · review accuracy ${Math.round(1000*(tw-ww)/tw)/10}% of ${tw} words`:""}</p>
-  <div class="grid">${U.map(u=>{const e=acc[u.id];return `<div class="cell s${learned(u)?2:(us(u).img?1:0)} ${e&&e.wrong.length?"bad":""}" title="${e?e.wrong.length+" wrong last time":""}">${u.label}</div>`}).join("")}</div>
-  <p class="small muted">Red outline: the last recital had a wrong word.</p></div>
+  <p class="small muted">Tap a verse to mark it learned (green). Tap it again to unmark it. Red outline: the last recital had a wrong word.</p>
+  ${G.chapters.map(c=>{const us_=U.filter(u=>u.ch===c.n),k=us_.filter(learned).length,open=k>0||c.n===ledCh||(!ledCh&&c.n===lanes().curCh);
+    return `<details class="led" data-ledch="${c.n}" ${open?"open":""}><summary><b>${c.n} · ${esc(c.title)}</b><span class="tag">${k} of ${us_.length}</span></summary>
+    <div class="grid">${us_.map(u=>{const e=acc[u.id];return `<button class="cell s${learned(u)?2:0} ${e&&e.wrong.length&&learned(u)?"bad":""}" data-tog="${u.i}" aria-pressed="${learned(u)}" title="${learned(u)?"Learned. Tap to unmark.":"Tap to mark as learned."}">${u.label.slice(u.label.indexOf(".")+1)}</button>`}).join("")}</div></details>`}).join("")}</div>
   <div class="card"><h2>Settings</h2><label class="f">Name</label><input type="text" id="nm2" value="${esc(S.name)}">
   <label class="f">New units a day</label><div class="seg">${[1,2,3].map(n=>`<button data-pace="${n}" class="${S.pace===n?"on":""}">${n}</button>`).join("")}</div>
   <label class="f">Already learned before starting here</label>
@@ -56224,6 +56232,10 @@ $("#view").addEventListener("click",e=>{
   if(d.trunit){const c=U.filter(u=>u.ch===tr.ch);train(d.trunit==="rand"?c[Math.floor(Math.random()*c.length)]:U[+d.trunit])}
   if(d.skiplane){logAdd({kind:d.skiplane,skipped:true});render()}
   if(d.lane)runLane(d.lane,L[d.lane],{title:{yesterday:"Yesterday first",chapter:"Chapter from its start",older:"Finished chapters"}[d.lane]});
+  if(d.tog!==undefined){const u=U[+d.tog],st=us(u),y=scrollY;ledCh=u.ch;
+    if(learned(u)){delete st.learned;delete st.pre;st.step=0;logAdd({kind:"unlearn",id:u.id})}
+    else{st.learned="2000-01-01";st.pre=true;st.step=5;if(!U.some(x=>x!==u&&learned(x)))S.first=u.ch;logAdd({kind:"premark",id:u.id})}
+    render();scrollTo(0,y)}
   if(d.learn)learn(U[+d.learn]);
   if(e.target.id==="pick-go")learn(U[+$("#pick-u").value]);
   if(d.skin){S.skin=d.skin;save();render()}
