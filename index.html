@@ -72,7 +72,7 @@ textarea,input[type=text]{font:inherit;color:inherit;width:100%;background:var(-
 #c3d-canvas{position:absolute;inset:0}
 #c3d-top{position:absolute;top:14px;left:14px;right:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 #c3d-top button,#c3d-panel button{background:var(--surface);border:1px solid var(--primary);color:var(--primary);border-radius:8px;padding:7px 12px;font-size:14.5px;font-weight:600}
-#pre-ch{font:inherit;color:inherit;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:6px}
+#pre-ch,select.pick{font:inherit;color:inherit;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:6px}
 #c3d-sel{font:600 14.5px var(--body);color:var(--primary);background:var(--surface);border:1px solid var(--primary);border-radius:8px;padding:7px 10px;max-width:60vw}
 #c3d-panel h3{margin:0;font:600 21px/1.25 var(--head);color:var(--primary)}
 #c3d-panel .list button{display:block;width:100%;text-align:left;margin:6px 0;font-weight:400;color:var(--text);border-color:var(--line)}
@@ -56060,7 +56060,7 @@ function learn(u){
 }
 
 /* ---------- views ---------- */
-let tab="today",reciteOpt={listener:false,type:false};
+let pickCh=0,tab="today",reciteOpt={listener:false,type:false};
 function vToday(){
   const L=lanes();
   const lane=(k,title,desc,units,locked)=>{const done=laneDone(k)&&units.length;
@@ -56075,8 +56075,13 @@ function vToday(){
   ${L.older.length?lane("older","3 · Finished chapters","Every day for 100 days, then weekly. Do this one walking, without the screen, and use the screen only to check.",L.older):""}
   <div class="card"><div class="row"><h2>${L.older.length?4:3} · New</h2><span class="sp"></span><span class="tag">${L.newToday} of ${S.pace} today</span></div>
   ${L.fresh.length?`<p>${ready?"Review is done. Learn in the evening if you can, then sleep on it.":"The review lanes are not done yet. Review first is the rule that keeps old verses alive, but you can go on."}</p>
-    <div class="row">${L.fresh.map((u,i)=>`<button class="btn" data-learn="${u.i}" ${i===0?"":"disabled"}>Learn ${u.label}</button>`).join("")}</div>`
-   :(U.every(learned)?"<p>The pilot chapters are learned. Keep the daily recitals going.</p>":"<p class='done'>Today's new units are done. Recall them three times before you sleep.</p>")}
+    <label class="f">Suggested next</label><div class="row">${L.fresh.map(u=>`<button class="btn" data-learn="${u.i}">Learn ${u.label}</button>`).join("")}</div>`
+   :(U.every(learned)?"<p>The pilot chapters are learned. Keep the daily recitals going.</p>":"<p class='done'>Today's planned new units are done. Recall them three times before you sleep. You can still choose more below.</p>")}
+  ${(()=>{if(!PILOT.includes(pickCh))pickCh=L.curCh;const us_=U.filter(u=>u.ch===pickCh),nx=us_.find(u=>!learned(u))||us_[0];
+    return `<label class="f">Or choose yourself</label><div class="row"><span class="small">Chapter</span><select id="pick-ch" class="pick">${PILOT.map(n=>`<option ${n===pickCh?"selected":""}>${n}</option>`).join("")}</select>
+    <span class="small">verse</span><select id="pick-u" class="pick">${us_.map(u=>`<option value="${u.i}" ${u===nx?"selected":""}>${u.label.slice(u.label.indexOf(".")+1)}${learned(u)?" ✓":""}</option>`).join("")}</select>
+    <button class="btn" id="pick-go">Learn this</button></div>
+    <p class="small muted">Any verse of any chapter. A tick means you have already learned it; choosing it again takes you through the steps once more.</p>`})()}
   </div>
   <p class="small muted">${L.total} of ${U.length} stations in place.</p>`;
 }
@@ -56220,6 +56225,7 @@ $("#view").addEventListener("click",e=>{
   if(d.skiplane){logAdd({kind:d.skiplane,skipped:true});render()}
   if(d.lane)runLane(d.lane,L[d.lane],{title:{yesterday:"Yesterday first",chapter:"Chapter from its start",older:"Finished chapters"}[d.lane]});
   if(d.learn)learn(U[+d.learn]);
+  if(e.target.id==="pick-go")learn(U[+$("#pick-u").value]);
   if(d.skin){S.skin=d.skin;save();render()}
   if(d.station)stationPanel(U[+d.station]);
   if(d.pace){S.pace=+d.pace;save();render()}
@@ -56240,6 +56246,7 @@ $("#view").addEventListener("click",e=>{
 });
 $("#view").addEventListener("change",e=>{const d=e.target.dataset;
   if(d.opt){reciteOpt[d.opt]=e.target.checked}
+  if(e.target.id==="pick-ch"){pickCh=+e.target.value;render()}
   if(d.place){S.places[d.place]=e.target.value.trim();save()}
   if(e.target.id==="nm2"){S.name=e.target.value.trim();save();render()}
   if(e.target.id==="imp"&&e.target.files[0]){const r=new FileReader();r.onload=()=>{try{const x=JSON.parse(r.result);if(!x.units||!x.log)throw 0;
